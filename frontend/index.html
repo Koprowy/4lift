@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8" />
+    <title>4lift – Dziennik treningowy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+        body { font-family: system-ui, sans-serif; background:#111; color:#eee; margin:0; }
+        header { padding:16px; background:#181818; font-size:20px; font-weight:600; }
+        main { padding:16px; max-width:800px; margin:auto; }
+        button { background:#2ecc71; border:none; padding:10px 14px; border-radius:8px; font-size:16px; cursor:pointer; }
+        button.secondary { background:#333; color:#eee; }
+        .card { background:#1c1c1c; padding:16px; border-radius:12px; margin-bottom:16px; }
+        input, textarea { width:100%; padding:8px; border-radius:6px; border:1px solid #333; background:#111; color:#eee; }
+        small { color:#aaa; }
+        .exercise { border-left:4px solid #2ecc71; padding-left:12px; margin-bottom:12px; }
+        .set { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+    </style>
+</head>
+
+<body>
+<header>4lift – szybki trening</header>
+
+<main>
+
+    <div class="card">
+        <h3>Nowy trening</h3>
+        <small>Minimum klikania</small><br><br>
+        <input id="template" placeholder="Typ treningu (np. PUSH)" /><br><br>
+        <button onclick="addExercise()">➕ Dodaj ćwiczenie</button>
+    </div>
+
+    <div id="exercises"></div>
+
+    <div class="card">
+        <textarea id="notes" placeholder="Notatka (opcjonalna)" style="height:60px"></textarea><br><br>
+        <button onclick="saveWorkout()">💾 Zapisz trening</button>
+    </div>
+
+    <div class="card">
+        <h3>Historia</h3>
+        <button class="secondary" onclick="loadHistory()">📅 Pokaż / ukryj</button>
+        <div id="history"></div>
+    </div>
+
+    <div class="card">
+        <h3>Kalendarz</h3>
+        <div id="calendar" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px"></div>
+    </div>
+
+    <div id="dayView" class="card" style="display:none"></div>
+    <canvas id="chart" height="200"></canvas>
+
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

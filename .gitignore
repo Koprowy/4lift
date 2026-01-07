@@ -1,0 +1,15 @@
+# Gradle / local caches (NIE wrzucamy na GitHuba)
+caches/
+daemon/
+native/
+wrapper/
+.gradle/
+build/
+out/
+
+# IntelliJ
+.idea/
+*.iml
+
+# Local config
+src/main/resources/application.yml
