@@ -2,60 +2,123 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8" />
-    <title>4lift – Dziennik treningowy</title>
+    <title>4lift</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <style>
-        body { font-family: system-ui, sans-serif; background:#111; color:#eee; margin:0; }
-        header { padding:16px; background:#181818; font-size:20px; font-weight:600; }
-        main { padding:16px; max-width:800px; margin:auto; }
-        button { background:#2ecc71; border:none; padding:10px 14px; border-radius:8px; font-size:16px; cursor:pointer; }
-        button.secondary { background:#333; color:#eee; }
-        .card { background:#1c1c1c; padding:16px; border-radius:12px; margin-bottom:16px; }
-        input, textarea { width:100%; padding:8px; border-radius:6px; border:1px solid #333; background:#111; color:#eee; }
-        small { color:#aaa; }
-        .exercise { border-left:4px solid #2ecc71; padding-left:12px; margin-bottom:12px; }
-        .set { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
-    </style>
+    <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
-<header>4lift – szybki trening</header>
+<header class="topbar">
+    <div class="brand">4lift</div>
+
+    <div id="topbarAuthed" class="topbar-right" style="display:none">
+        <span id="whoami" class="muted"></span>
+        <button class="secondary" onclick="logout()">Wyloguj</button>
+    </div>
+</header>
 
 <main>
 
-    <div class="card">
-        <h3>Nowy trening</h3>
-        <small>Minimum klikania</small><br><br>
-        <input id="template" placeholder="Typ treningu (np. PUSH)" /><br><br>
-        <button onclick="addExercise()">➕ Dodaj ćwiczenie</button>
-    </div>
+    <!-- ===== VIEW: LOGIN ===== -->
+    <section id="view-login" class="card">
+        <h2>Wejście</h2>
+        <p class="muted">Zaloguj się, żeby zapisywać historię. Gość działa bez zapisu.</p>
 
-    <div id="exercises"></div>
+        <div class="tabs">
+            <button id="tab-login" class="tab active" onclick="switchAuthTab('login')">Logowanie</button>
+            <button id="tab-register" class="tab" onclick="switchAuthTab('register')">Rejestracja</button>
+        </div>
 
-    <div class="card">
-        <textarea id="notes" placeholder="Notatka (opcjonalna)" style="height:60px"></textarea><br><br>
-        <button onclick="saveWorkout()">💾 Zapisz trening</button>
-    </div>
+        <div class="form">
+            <input id="authEmail" type="email" placeholder="Email" autocomplete="email" />
+            <input id="authPass" type="password" placeholder="Hasło" autocomplete="current-password" />
+        </div>
 
-    <div class="card">
-        <h3>Historia</h3>
-        <button class="secondary" onclick="loadHistory()">📅 Pokaż / ukryj</button>
-        <div id="history"></div>
-    </div>
+        <div id="auth-login" class="actions">
+            <button onclick="login()">Zaloguj</button>
+            <button class="secondary" onclick="continueAsGuest()">Kontynuuj jako gość</button>
+        </div>
 
-    <div class="card">
-        <h3>Kalendarz</h3>
-        <div id="calendar" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px"></div>
-    </div>
+        <div id="auth-register" class="actions" style="display:none">
+            <button onclick="register()">Zarejestruj</button>
+            <button class="secondary" onclick="switchAuthTab('login')">Mam konto</button>
+        </div>
 
-    <div id="dayView" class="card" style="display:none"></div>
-    <canvas id="chart" height="200"></canvas>
+        <p id="authMsg" class="muted" style="margin-top:10px"></p>
+    </section>
 
+    <!-- ===== VIEW: APP ===== -->
+    <section id="view-app" style="display:none">
 
+        <div class="nav">
+            <button id="nav-new" class="navbtn active" onclick="showSection('new')">Nowy trening</button>
+            <button id="nav-history" class="navbtn" onclick="showSection('history')">Historia</button>
+            <button id="nav-progress" class="navbtn" onclick="showSection('progress')">Progres</button>
+        </div>
+
+        <!-- NEW -->
+        <section id="section-new">
+            <div class="card">
+                <h3>Nowy trening</h3>
+                <small class="muted">Minimum klikania</small><br><br>
+
+                <input id="template" placeholder="Typ (np. PUSH / PULL / LEGS)" />
+                <div class="row" style="margin-top:12px">
+                    <button onclick="addExercise()">➕ Dodaj ćwiczenie</button>
+                    <button class="secondary" onclick="clearWorkout()">Wyczyść</button>
+                </div>
+
+                <p id="guestHint" class="muted" style="display:none;margin-top:10px">
+                    Jesteś jako gość – trening nie zapisze się w bazie.
+                </p>
+            </div>
+
+            <div id="exercises"></div>
+
+            <div class="card">
+                <textarea id="notes" placeholder="Notatka (opcjonalna)" style="height:70px"></textarea>
+                <div style="margin-top:12px">
+                    <button onclick="saveWorkout()">💾 Zapisz trening</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- HISTORY -->
+        <section id="section-history" style="display:none">
+            <div class="card">
+                <h3>Historia</h3>
+                <div class="row">
+                    <button class="secondary" onclick="loadHistory()">Odśwież</button>
+                    <button class="secondary" onclick="toggleCalendar()">Pokaż/ukryj kalendarz</button>
+                </div>
+                <div id="history" style="margin-top:12px"></div>
+            </div>
+
+            <div id="calendarCard" class="card" style="display:none">
+                <h3>Kalendarz</h3>
+                <div id="calendar" class="calendar"></div>
+            </div>
+
+            <div id="dayView" class="card" style="display:none"></div>
+        </section>
+
+        <!-- PROGRESS -->
+        <section id="section-progress" style="display:none">
+            <div class="card">
+                <h3 id="chartTitle">Progres</h3>
+                <small id="chartHint" class="muted">Kliknij ćwiczenie w podglądzie dnia (Historia → dzień)</small>
+                <br><br>
+                <canvas id="chart" height="220"></canvas>
+            </div>
+        </section>
+
+    </section>
 </main>
 
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script src="script.js"></script>
 </body>
 </html>

@@ -108,3 +108,47 @@ button.danger {
 .actions button {
   width: 100%;
 }
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 16px; background:#151515;
+}
+.brand{ font-size:18px; font-weight:700; }
+.topbar-right{ display:flex; gap:10px; align-items:center; }
+.muted{ color:#a7a7a7; font-size:14px; }
+
+.row{ display:flex; gap:10px; }
+.row > *{ flex:1; }
+
+.nav{
+  display:flex; gap:10px; margin-bottom:14px;
+}
+.navbtn{
+  flex:1;
+  background:#1f1f1f;
+  color:#ddd;
+  border:none;
+  padding:10px 12px;
+  border-radius:12px;
+  cursor:pointer;
+}
+.navbtn.active{
+  background:#2ecc71;
+  color:#0d0d0d;
+  font-weight:700;
+}
+
+.tabs{ display:flex; gap:10px; margin:12px 0; }
+.tab{
+  flex:1; padding:10px 12px; border-radius:12px;
+  border:1px solid #2a2a2a; background:#111; color:#ddd; cursor:pointer;
+}
+.tab.active{ background:#2a2a2a; }
+
+.form{ display:flex; flex-direction:column; gap:10px; }
+
+.calendar{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:8px;
+}
+
