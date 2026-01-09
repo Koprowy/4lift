@@ -2,6 +2,7 @@
 const API = "http://localhost:8080/api";
 
 
+
 // Supabase client (bez kolizji nazw)
 const sb = (window.supabase && window.supabase.createClient)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -10,14 +11,57 @@ const sb = (window.supabase && window.supabase.createClient)
 // ===== STATE =====
 let currentUserId = null;   // supabase user.id albo null (gość)
 let currentEmail = null;
+let myTemplates = [];
 
 let exercises = [];
 let historyVisible = false;
 let lastWorkoutsCache = [];
 let chartInstance = null;
 let calendarVisible = false;
+let weightStep = 2.5;
+const DEFAULT_TEMPLATES = {
+  PUSH_A: {
+    name: "PUSH A",
+    exercises: [
+      { name: "Wyciskanie sztangi leżąc", sets: [{weight: 0, reps: 8, drop:false},{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
+      { name: "Wyciskanie hantli skos", sets: [{weight:0,reps:10,drop:false},{weight:0,reps:10,drop:false}] },
+      { name: "OHP / Wyciskanie nad głowę", sets: [{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
+      { name: "Prostowanie na triceps", sets: [{weight:0,reps:12,drop:false},{weight:0,reps:12,drop:false}] }
+    ]
+  },
+  PULL_A: {
+    name: "PULL A",
+    exercises: [
+      { name: "Wiosłowanie sztangą", sets: [{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
+      { name: "Ściąganie drążka", sets: [{weight:0,reps:10,drop:false},{weight:0,reps:10,drop:false}] },
+      { name: "Face pull", sets: [{weight:0,reps:15,drop:false},{weight:0,reps:15,drop:false}] },
+      { name: "Uginanie na biceps", sets: [{weight:0,reps:12,drop:false},{weight:0,reps:12,drop:false}] }
+    ]
+  },
+  LEGS_A: {
+    name: "LEGS A",
+    exercises: [
+      { name: "Przysiady", sets: [{weight:0,reps:6,drop:false},{weight:0,reps:6,drop:false},{weight:0,reps:6,drop:false}] },
+      { name: "RDL / Martwy na prostych", sets: [{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
+      { name: "Wypychanie na suwnicy", sets: [{weight:0,reps:10,drop:false},{weight:0,reps:10,drop:false}] },
+      { name: "Łydki", sets: [{weight:0,reps:15,drop:false},{weight:0,reps:15,drop:false}] }
+    ]
+  },
+  FULLBODY_A: {
+    name: "FULL BODY A",
+    exercises: [
+      { name: "Przysiady", sets: [{weight:0,reps:5,drop:false},{weight:0,reps:5,drop:false}] },
+      { name: "Wyciskanie leżąc", sets: [{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
+      { name: "Wiosłowanie", sets: [{weight:0,reps:10,drop:false},{weight:0,reps:10,drop:false}] }
+    ]
+  }
+};
+
 
 // ===== UI HELPERS =====
+function setWeightStep(v){
+weightStep = Number(v);
+}
 function setAuthMsg(msg) {
   const el = document.getElementById("authMsg");
   if (el) el.textContent = msg || "";
@@ -48,11 +92,17 @@ function showView(name) {
 }
 
 function showSection(sec) {
+  if (!currentUserId && (sec === "history" || sec === "progress")) {
+    alert("Zaloguj się, żeby mieć historię i progres 🙂");
+    return;
+  }
+
   ["new", "history", "progress"].forEach(s => {
     document.getElementById(`section-${s}`).style.display = (s === sec) ? "block" : "none";
     document.getElementById(`nav-${s}`).classList.toggle("active", s === sec);
   });
 }
+
 
 function toggleCalendar() {
   calendarVisible = !calendarVisible;
@@ -60,10 +110,15 @@ function toggleCalendar() {
 }
 
 function continueAsGuest() {
+  // ważne: reset UI po poprzednim userze
+  resetAppState();
+
   currentUserId = null;
   currentEmail = null;
+
   showView("app");
   showSection("new");
+  updateNavForAuth();
 }
 
 function ensureSupabaseReady() {
@@ -102,6 +157,10 @@ async function login() {
   currentUserId = data.user.id;
   currentEmail = data.user.email;
 
+  resetAppState();
+  updateNavForAuth();
+
+
   showView("app");
   showSection("new");
   setAuthMsg("");
@@ -109,11 +168,24 @@ async function login() {
 
 async function logout() {
   if (!ensureSupabaseReady()) return;
+
   await sb.auth.signOut();
+
+  // reset wszystko co było z usera
+  resetAppState();
+
   currentUserId = null;
   currentEmail = null;
+
   showView("login");
   switchAuthTab("login");
+  updateNavForAuth();
+}
+
+function goToLogin(){
+  showView("login");
+  switchAuthTab("login");
+  setAuthMsg("");
 }
 
 // ===== WORKOUT UI =====
@@ -138,73 +210,278 @@ function clearWorkout() {
   document.getElementById("notes").value = "";
   render();
 }
+function applyTemplate(key){
+  if(!key || !DEFAULT_TEMPLATES[key]) return;
 
-function render() {
-  const root = document.getElementById("exercises");
-  root.innerHTML = "";
+  const tpl = DEFAULT_TEMPLATES[key];
 
-  exercises.forEach((ex, i) => {
-    const div = document.createElement("div");
-    div.className = "card exercise";
+  // ustaw nazwę treningu / typ
+  const input = document.getElementById("template");
+  if(input) input.value = tpl.name;
 
-    div.innerHTML = `
-      <input placeholder="Ćwiczenie"
-             value="${ex.name}"
-             oninput="exercises[${i}].name=this.value" />
+  // wczytaj ćwiczenia
+  exercises = tpl.exercises.map(ex => ({
+    id: crypto.randomUUID(),
+    name: ex.name,
+    sets: ex.sets.map(s => ({ weight: s.weight ?? 0, reps: s.reps ?? 0, drop: !!s.drop }))
+  }));
 
-      <div style="margin-top:10px">
-        ${ex.sets.map((s, si) => `
-          <div class="set">
-            <button onclick="decWeight(${i},${si})">−</button>
-            <span>${s.weight} kg</span>
-            <button onclick="incWeight(${i},${si})">+</button>
-
-            <button onclick="decReps(${i},${si})">−</button>
-            <span>${s.reps} reps</span>
-            <button onclick="incReps(${i},${si})">+</button>
-
-            <span class="badge" onclick="toggleDrop(${i},${si})">${s.drop ? "DS ✓" : "DS"}</span>
-            <button class="secondary" onclick="removeSet(${i},${si})">❌</button>
-          </div>
-        `).join("")}
-      </div>
-
-      <button class="secondary" style="margin-top:8px" onclick="addSet('${ex.id}')">+ seria</button>
-    `;
-
-    root.appendChild(div);
-  });
+  render();
 }
+async function loadMyTemplates(){
+  if(!currentUserId){
+    alert("Zaloguj się, żeby mieć swoje szablony 🙂");
+    return;
+  }
+
+  const r = await fetch(`${API}/templates?userId=${currentUserId}`);
+  if(!r.ok){ alert("Nie udało się pobrać szablonów"); return; }
+
+  myTemplates = await r.json();
+
+  // podmień options w select
+  const sel = document.getElementById("templateSelect");
+  if(!sel) return;
+
+  const fixed = `
+    <option value="">— Wybierz gotowy trening —</option>
+    <option value="PUSH_A">PUSH A (klata/barki/tric)</option>
+    <option value="PULL_A">PULL A (plecy/bic)</option>
+    <option value="LEGS_A">LEGS A (nogi)</option>
+    <option value="FULLBODY_A">FULL BODY A</option>
+    <option value="" disabled>────────────</option>
+    <option value="" disabled>Moje szablony</option>
+  `;
+
+  const mine = myTemplates.map(t => `<option value="MY:${t.id}">${t.name}</option>`).join("");
+  sel.innerHTML = fixed + mine;
+}
+
+function applyTemplate(key){
+  // moje z bazy
+  if(key && key.startsWith("MY:")){
+    const id = key.substring(3);
+    const t = myTemplates.find(x => x.id === id);
+    if(!t) return;
+
+    const input = document.getElementById("template");
+    if(input) input.value = t.name;
+
+    exercises = (t.exercises ?? [])
+      .sort((a,b)=>a.exerciseOrder-b.exerciseOrder)
+      .map(ex => ({
+        id: crypto.randomUUID(),
+        name: ex.exerciseName,
+        sets: (ex.sets ?? [])
+          .sort((a,b)=>a.setOrder-b.setOrder)
+          .map(s => ({ weight: 0, reps: s.reps ?? 0, drop: !!s.isDrop }))
+      }));
+
+    render();
+    return;
+  }
+
+  // stare defaulty
+  if(!key || !DEFAULT_TEMPLATES[key]) return;
+  const tpl = DEFAULT_TEMPLATES[key];
+
+  const input = document.getElementById("template");
+  if(input) input.value = tpl.name;
+
+  exercises = tpl.exercises.map(ex => ({
+    id: crypto.randomUUID(),
+    name: ex.name,
+    sets: ex.sets.map(s => ({ weight: s.weight ?? 0, reps: s.reps ?? 0, drop: !!s.drop }))
+  }));
+
+  render();
+}
+
+async function saveAsTemplate(){
+  if(!currentUserId){
+    alert("Zaloguj się, żeby zapisać szablon 🙂");
+    return;
+  }
+
+  const name = prompt("Nazwa szablonu:", document.getElementById("template").value || "Mój trening");
+  if(!name) return;
+
+  const payload = {
+    userId: currentUserId,
+    name,
+    exercises: exercises
+      .filter(e => e.name.trim().length > 0 && e.sets.length > 0)
+      .map((e, i) => ({
+        name: e.name,
+        order: i,
+        sets: e.sets.map((s, si) => ({
+          reps: Number(s.reps) || 0,
+          order: si,
+          isDrop: !!s.drop
+        }))
+      }))
+  };
+
+  if(payload.exercises.length === 0){
+    alert("Szablon musi mieć chociaż 1 ćwiczenie i serię 🙂");
+    return;
+  }
+
+  const r = await fetch(`${API}/templates`, {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if(!r.ok){
+    alert("Nie udało się zapisać szablonu");
+    return;
+  }
+
+  alert("Zapisano szablon ✅");
+  await loadMyTemplates();
+}
+
+
+function resetAppState() {
+  // formularz
+  exercises = [];
+  historyVisible = false;
+  calendarVisible = false;
+  lastWorkoutsCache = [];
+
+  // UI: czyść widoki
+  const history = document.getElementById("history");
+  if (history) history.innerHTML = "";
+
+  const cal = document.getElementById("calendar");
+  if (cal) cal.innerHTML = "";
+
+  const day = document.getElementById("dayView");
+  if (day) { day.style.display = "none"; day.innerHTML = ""; }
+
+  const calendarCard = document.getElementById("calendarCard");
+  if (calendarCard) calendarCard.style.display = "none";
+
+  // wykres
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+  // wyczyść inputy
+  const t = document.getElementById("template");
+  const n = document.getElementById("notes");
+  if (t) t.value = "";
+  if (n) n.value = "";
+
+  render();
+}
+function render() {
+   const root = document.getElementById("exercises");
+   root.innerHTML = "";
+
+   // mały panel kroku (pokazuje się jak są ćwiczenia)
+   if (exercises.length > 0) {
+     const stepCard = document.createElement("div");
+     stepCard.className = "card";
+     stepCard.innerHTML = `
+       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px">
+         <div>
+           <strong>Krok ciężaru</strong><br>
+           <small class="muted">Szybciej dobijesz do 60/80/100, a jak trzeba to wpisz ręcznie.</small>
+         </div>
+         <select onchange="setWeightStep(this.value)" style="padding:10px;border-radius:10px;background:#0f0f0f;color:#eee;border:1px solid #2a2a2a">
+           ${[0.5,1,2.5,5,10].map(v => `
+             <option value="${v}" ${Number(weightStep)===v ? "selected" : ""}>${v} kg</option>
+           `).join("")}
+         </select>
+       </div>
+     `;
+     root.appendChild(stepCard);
+   }
+
+   exercises.forEach((ex, i) => {
+     const div = document.createElement("div");
+     div.className = "card exercise";
+
+     div.innerHTML = `
+       <input placeholder="Ćwiczenie"
+              value="${ex.name}"
+              oninput="exercises[${i}].name=this.value" />
+
+       <div style="margin-top:10px">
+         ${ex.sets.map((s, si) => `
+           <div class="set" style="flex-wrap:wrap">
+
+             <!-- KG -->
+             <button onclick="decWeight(${i},${si})">−</button>
+             <input type="number"
+                    step="0.5"
+                    inputmode="decimal"
+                    style="width:110px"
+                    value="${Number(s.weight) || 0}"
+                    oninput="setWeight(${i},${si}, this.value)" />
+             <button onclick="incWeight(${i},${si})">+</button>
+             <span class="muted" style="min-width:28px">kg</span>
+
+             <!-- REPS -->
+             <button onclick="decReps(${i},${si})">−</button>
+             <input type="number"
+                    step="1"
+                    inputmode="numeric"
+                    style="width:80px"
+                    value="${Number(s.reps) || 0}"
+                    oninput="setReps(${i},${si}, this.value)" />
+             <button onclick="incReps(${i},${si})">+</button>
+             <span class="muted" style="min-width:44px">reps</span>
+
+             <!-- DS + DELETE -->
+             <span class="badge" onclick="toggleDrop(${i},${si})">${s.drop ? "DS ✓" : "DS"}</span>
+             <button class="secondary" onclick="removeSet(${i},${si})">❌</button>
+
+           </div>
+         `).join("")}
+       </div>
+
+       <button class="secondary" style="margin-top:8px" onclick="addSet('${ex.id}')">+ seria</button>
+     `;
+
+     root.appendChild(div);
+   });
+ }
+
 
 // ===== SET UX =====
-function incWeight(i, si) { exercises[i].sets[si].weight += 2.5; render(); }
-function decWeight(i, si) { exercises[i].sets[si].weight = Math.max(0, exercises[i].sets[si].weight - 2.5); render(); }
+// ===== SET UX =====
+function incWeight(i, si) {
+  exercises[i].sets[si].weight = roundToStep((Number(exercises[i].sets[si].weight) || 0) + weightStep, 0.5);
+  render();
+}
+function decWeight(i, si) {
+  exercises[i].sets[si].weight = Math.max(0, roundToStep((Number(exercises[i].sets[si].weight) || 0) - weightStep, 0.5));
+  render();
+}
 
-function incReps(i, si) { exercises[i].sets[si].reps++; render(); }
-function decReps(i, si) { exercises[i].sets[si].reps = Math.max(0, exercises[i].sets[si].reps - 1); render(); }
+function setWeight(i, si, val){
+  const n = Number(val);
+  exercises[i].sets[si].weight = Number.isFinite(n) ? roundToStep(n, 0.5) : 0;
+}
+
+function incReps(i, si) { exercises[i].sets[si].reps = (Number(exercises[i].sets[si].reps) || 0) + 1; render(); }
+function decReps(i, si) { exercises[i].sets[si].reps = Math.max(0, (Number(exercises[i].sets[si].reps) || 0) - 1); render(); }
+
+function setReps(i, si, val){
+  const n = Number(val);
+  exercises[i].sets[si].reps = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+}
 
 function toggleDrop(i, si) { exercises[i].sets[si].drop = !exercises[i].sets[si].drop; render(); }
-
 function removeSet(i, si) { exercises[i].sets.splice(si, 1); render(); }
 
-// ===== API HELPERS =====
-async function fetchWorkouts() {
-  const r = await fetch(`${API}/workouts?userId=${currentUserId}`);
-  if (!r.ok) throw new Error("Nie udało się pobrać historii");
-  const data = await r.json();
-  lastWorkoutsCache = data;
-  return data;
+// zaokrąglenie do np. 0.5
+function roundToStep(x, step){
+  const s = Number(step) || 0.5;
+  return Math.round(x / s) * s;
 }
 
-function renderHistory(data) {
-  const root = document.getElementById("history");
-  root.innerHTML = data.map(w => `
-    <div class="card">
-      <strong>${w.workoutDate}</strong> – ${w.templateName ?? ""}
-      <button class="secondary" style="float:right" onclick="deleteWorkout('${w.id}')">🗑</button>
-    </div>
-  `).join("");
-}
 
 // ===== SAVE =====
 async function saveWorkout() {
@@ -439,9 +716,11 @@ function loadProgress(name) {
     switchAuthTab("login");
     console.warn(e);
   }
+
 })();
 
 // ===== expose for onclick =====
+window.goToLogin = goToLogin;
 window.switchAuthTab = switchAuthTab;
 window.login = login;
 window.register = register;
@@ -460,6 +739,12 @@ window.loadHistory = loadHistory;
 window.showDay = showDay;
 window.deleteWorkout = deleteWorkout;
 window.loadProgress = loadProgress;
+window.setWeightStep = setWeightStep;
+window.setWeight = setWeight;
+window.setReps = setReps;
+window.applyTemplate = applyTemplate;
+window.loadMyTemplates = loadMyTemplates;
+window.saveAsTemplate = saveAsTemplate;
 
-// also expose state array used by inline oninput
-window.exercises = exercises;
+
+
