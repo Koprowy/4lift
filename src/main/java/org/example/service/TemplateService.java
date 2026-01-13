@@ -33,7 +33,8 @@ public class TemplateService {
                 st.setTemplateExercise(e);
                 st.setSetOrder(s.order());
                 st.setReps(s.reps());
-                st.setIsDrop(s.isDrop());
+                st.setDrop(s.isDrop());
+
                 return st;
             }).toList();
 
@@ -50,7 +51,6 @@ public class TemplateService {
     }
 
     public void delete(UUID userId, UUID templateId) {
-        // prosta autoryzacja: kasujesz tylko swoje
         WorkoutTemplate t = repo.findById(templateId).orElseThrow();
         if (!t.getUserId().equals(userId)) throw new RuntimeException("Not allowed");
         repo.deleteById(templateId);

@@ -11,19 +11,26 @@ const sb = (window.supabase && window.supabase.createClient)
 // ===== STATE =====
 let currentUserId = null;   // supabase user.id albo null (gość)
 let currentEmail = null;
-let myTemplates = [];
 
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-11
+
+let myTemplates = [];
 let exercises = [];
+
 let historyVisible = false;
 let lastWorkoutsCache = [];
 let chartInstance = null;
+
 let calendarVisible = false;
 let weightStep = 2.5;
+
+// ===== DEFAULT TEMPLATES =====
 const DEFAULT_TEMPLATES = {
   PUSH_A: {
     name: "PUSH A",
     exercises: [
-      { name: "Wyciskanie sztangi leżąc", sets: [{weight: 0, reps: 8, drop:false},{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
+      { name: "Wyciskanie sztangi leżąc", sets: [{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
       { name: "Wyciskanie hantli skos", sets: [{weight:0,reps:10,drop:false},{weight:0,reps:10,drop:false}] },
       { name: "OHP / Wyciskanie nad głowę", sets: [{weight:0,reps:8,drop:false},{weight:0,reps:8,drop:false}] },
       { name: "Prostowanie na triceps", sets: [{weight:0,reps:12,drop:false},{weight:0,reps:12,drop:false}] }
@@ -57,14 +64,22 @@ const DEFAULT_TEMPLATES = {
   }
 };
 
-
 // ===== UI HELPERS =====
-function setWeightStep(v){
-weightStep = Number(v);
-}
 function setAuthMsg(msg) {
   const el = document.getElementById("authMsg");
   if (el) el.textContent = msg || "";
+}
+
+function setWeightStep(v){
+  weightStep = Number(v);
+}
+
+function ensureSupabaseReady() {
+  if (!sb) {
+    setAuthMsg("Supabase się nie załadował. Sprawdź czy CDN supabase-js jest nad script.js.");
+    return false;
+  }
+  return true;
 }
 
 function switchAuthTab(tab) {
@@ -75,6 +90,7 @@ function switchAuthTab(tab) {
   document.getElementById("tab-register").classList.toggle("active", !isLogin);
   setAuthMsg("");
 }
+
 
 function showView(name) {
   const isLogin = name === "login";
@@ -91,6 +107,7 @@ function showView(name) {
   if (guestHint) guestHint.style.display = (!currentUserId && !isLogin) ? "block" : "none";
 }
 
+// blokada history/progress dla gościa (Twoja logika zostaje)
 function showSection(sec) {
   if (!currentUserId && (sec === "history" || sec === "progress")) {
     alert("Zaloguj się, żeby mieć historię i progres 🙂");
@@ -103,30 +120,98 @@ function showSection(sec) {
   });
 }
 
+const MONTHS_PL = [
+  "Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
+  "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"
+];
+
+function updateCalendarHeader(){
+  const el = document.getElementById("calendarTitle");
+  if (el) el.textContent = `${MONTHS_PL[calMonth]} ${calYear}`;
+}
+
 
 function toggleCalendar() {
   calendarVisible = !calendarVisible;
   document.getElementById("calendarCard").style.display = calendarVisible ? "block" : "none";
 }
 
-function continueAsGuest() {
-  // ważne: reset UI po poprzednim userze
+function goToLogin(){
   resetAppState();
-
-  currentUserId = null;
-  currentEmail = null;
-
-  showView("app");
-  showSection("new");
-  updateNavForAuth();
+  showView("login");
+  switchAuthTab("login");
+  setAuthMsg("");
+}
+function prevMonth(){
+  calMonth--;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar(lastWorkoutsCache);
 }
 
-function ensureSupabaseReady() {
-  if (!sb) {
-    setAuthMsg("Supabase się nie załadował. Sprawdź internet i czy CDN supabase-js jest w index.html.");
-    return false;
-  }
-  return true;
+function nextMonth(){
+  calMonth++;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar(lastWorkoutsCache);
+}
+
+function jumpToLatestWorkoutMonth(){
+  if (!lastWorkoutsCache || lastWorkoutsCache.length === 0) return;
+
+  // bierzemy najnowszą datę treningu z cache
+  const dates = lastWorkoutsCache
+    .map(w => w.workoutDate)
+    .filter(Boolean)
+    .sort(); // YYYY-MM-DD sortuje się leksykograficznie poprawnie
+
+  const latest = dates[dates.length - 1];
+  const [y, m] = latest.split("-").map(Number);
+  if (!y || !m) return;
+
+  calYear = y;
+  calMonth = m - 1;
+}
+
+
+// ===== RESET (naprawia “duchy”) =====
+function resetAppState() {
+  // state
+  exercises = [];
+  myTemplates = [];
+  lastWorkoutsCache = [];
+
+  historyVisible = false;
+  calendarVisible = false;
+
+  // UI czyścimy
+  const history = document.getElementById("history");
+  if (history) history.innerHTML = "";
+
+  const cal = document.getElementById("calendar");
+  if (cal) cal.innerHTML = "";
+
+  const day = document.getElementById("dayView");
+  if (day) { day.style.display = "none"; day.innerHTML = ""; }
+
+  const calendarCard = document.getElementById("calendarCard");
+  if (calendarCard) calendarCard.style.display = "none";
+
+  // wykres
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+  // inputy
+  const t = document.getElementById("template");
+  const n = document.getElementById("notes");
+  if (t) t.value = "";
+  if (n) n.value = "";
+
+  // select wraca do default
+  const sel = document.getElementById("templateSelect");
+  if (sel) sel.value = "";
+
+  // ważne dla oninput z HTML (żeby zawsze widziało aktualną tablicę)
+  window.exercises = exercises;
+
+  render();
 }
 
 // ===== AUTH =====
@@ -140,7 +225,7 @@ async function register() {
   const { error } = await sb.auth.signUp({ email, password });
   if (error) { setAuthMsg(error.message); return; }
 
-  setAuthMsg("Konto utworzone ✅ Jeśli masz włączoną weryfikację maila — potwierdź i zaloguj się.");
+  setAuthMsg("Konto utworzone ✅ Zaloguj się.");
   switchAuthTab("login");
 }
 
@@ -157,35 +242,35 @@ async function login() {
   currentUserId = data.user.id;
   currentEmail = data.user.email;
 
-  resetAppState();
-  updateNavForAuth();
-
-
+  resetAppState(); // czyścimy wszystko po poprzedniej sesji
   showView("app");
   showSection("new");
   setAuthMsg("");
+
+  // wczytaj moje szablony po loginie
+  await loadMyTemplates().catch(()=>{});
 }
 
 async function logout() {
   if (!ensureSupabaseReady()) return;
-
   await sb.auth.signOut();
 
-  // reset wszystko co było z usera
   resetAppState();
-
   currentUserId = null;
   currentEmail = null;
 
   showView("login");
   switchAuthTab("login");
-  updateNavForAuth();
 }
 
-function goToLogin(){
-  showView("login");
-  switchAuthTab("login");
-  setAuthMsg("");
+function continueAsGuest() {
+  // super ważne: pełny reset + user null
+  resetAppState();
+  currentUserId = null;
+  currentEmail = null;
+
+  showView("app");
+  showSection("new");
 }
 
 // ===== WORKOUT UI =====
@@ -195,51 +280,34 @@ function addExercise() {
     name: "",
     sets: [{ weight: 0, reps: 0, drop: false }]
   });
+  window.exercises = exercises;
   render();
 }
 
 function addSet(exId) {
   const ex = exercises.find(e => e.id === exId);
   ex.sets.push({ weight: 0, reps: 0, drop: false });
+  window.exercises = exercises;
   render();
 }
 
 function clearWorkout() {
   exercises = [];
+  window.exercises = exercises;
   document.getElementById("template").value = "";
   document.getElementById("notes").value = "";
   render();
 }
-function applyTemplate(key){
-  if(!key || !DEFAULT_TEMPLATES[key]) return;
 
-  const tpl = DEFAULT_TEMPLATES[key];
-
-  // ustaw nazwę treningu / typ
-  const input = document.getElementById("template");
-  if(input) input.value = tpl.name;
-
-  // wczytaj ćwiczenia
-  exercises = tpl.exercises.map(ex => ({
-    id: crypto.randomUUID(),
-    name: ex.name,
-    sets: ex.sets.map(s => ({ weight: s.weight ?? 0, reps: s.reps ?? 0, drop: !!s.drop }))
-  }));
-
-  render();
-}
+// ===== TEMPLATES =====
 async function loadMyTemplates(){
-  if(!currentUserId){
-    alert("Zaloguj się, żeby mieć swoje szablony 🙂");
-    return;
-  }
+  if(!currentUserId) return;
 
   const r = await fetch(`${API}/templates?userId=${currentUserId}`);
-  if(!r.ok){ alert("Nie udało się pobrać szablonów"); return; }
+  if(!r.ok) return;
 
   myTemplates = await r.json();
 
-  // podmień options w select
   const sel = document.getElementById("templateSelect");
   if(!sel) return;
 
@@ -277,11 +345,12 @@ function applyTemplate(key){
           .map(s => ({ weight: 0, reps: s.reps ?? 0, drop: !!s.isDrop }))
       }));
 
+    window.exercises = exercises;
     render();
     return;
   }
 
-  // stare defaulty
+  // default
   if(!key || !DEFAULT_TEMPLATES[key]) return;
   const tpl = DEFAULT_TEMPLATES[key];
 
@@ -294,6 +363,7 @@ function applyTemplate(key){
     sets: ex.sets.map(s => ({ weight: s.weight ?? 0, reps: s.reps ?? 0, drop: !!s.drop }))
   }));
 
+  window.exercises = exercises;
   render();
 }
 
@@ -342,115 +412,79 @@ async function saveAsTemplate(){
   await loadMyTemplates();
 }
 
-
-function resetAppState() {
-  // formularz
-  exercises = [];
-  historyVisible = false;
-  calendarVisible = false;
-  lastWorkoutsCache = [];
-
-  // UI: czyść widoki
-  const history = document.getElementById("history");
-  if (history) history.innerHTML = "";
-
-  const cal = document.getElementById("calendar");
-  if (cal) cal.innerHTML = "";
-
-  const day = document.getElementById("dayView");
-  if (day) { day.style.display = "none"; day.innerHTML = ""; }
-
-  const calendarCard = document.getElementById("calendarCard");
-  if (calendarCard) calendarCard.style.display = "none";
-
-  // wykres
-  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
-
-  // wyczyść inputy
-  const t = document.getElementById("template");
-  const n = document.getElementById("notes");
-  if (t) t.value = "";
-  if (n) n.value = "";
-
-  render();
-}
+// ===== RENDER (z inputem na kg/reps + step) =====
 function render() {
-   const root = document.getElementById("exercises");
-   root.innerHTML = "";
+  const root = document.getElementById("exercises");
+  root.innerHTML = "";
 
-   // mały panel kroku (pokazuje się jak są ćwiczenia)
-   if (exercises.length > 0) {
-     const stepCard = document.createElement("div");
-     stepCard.className = "card";
-     stepCard.innerHTML = `
-       <div style="display:flex; justify-content:space-between; align-items:center; gap:10px">
-         <div>
-           <strong>Krok ciężaru</strong><br>
-           <small class="muted">Szybciej dobijesz do 60/80/100, a jak trzeba to wpisz ręcznie.</small>
-         </div>
-         <select onchange="setWeightStep(this.value)" style="padding:10px;border-radius:10px;background:#0f0f0f;color:#eee;border:1px solid #2a2a2a">
-           ${[0.5,1,2.5,5,10].map(v => `
-             <option value="${v}" ${Number(weightStep)===v ? "selected" : ""}>${v} kg</option>
-           `).join("")}
-         </select>
-       </div>
-     `;
-     root.appendChild(stepCard);
-   }
+  if (exercises.length > 0) {
+    const stepCard = document.createElement("div");
+    stepCard.className = "card";
+    stepCard.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px">
+        <div>
+          <strong>Krok ciężaru</strong><br>
+          <small class="muted">Szybciej dobijesz do 60/80/100, a jak trzeba to wpisz ręcznie.</small>
+        </div>
+        <select onchange="setWeightStep(this.value)" style="padding:10px;border-radius:10px;background:#0f0f0f;color:#eee;border:1px solid #2a2a2a">
+          ${[0.5,1,2.5,5,10].map(v => `
+            <option value="${v}" ${Number(weightStep)===v ? "selected" : ""}>${v} kg</option>
+          `).join("")}
+        </select>
+      </div>
+    `;
+    root.appendChild(stepCard);
+  }
 
-   exercises.forEach((ex, i) => {
-     const div = document.createElement("div");
-     div.className = "card exercise";
+  exercises.forEach((ex, i) => {
+    const div = document.createElement("div");
+    div.className = "card exercise";
 
-     div.innerHTML = `
-       <input placeholder="Ćwiczenie"
-              value="${ex.name}"
-              oninput="exercises[${i}].name=this.value" />
+div.innerHTML = `
+  <div style="display:flex; gap:10px; align-items:center">
+    <input style="flex:1" placeholder="Ćwiczenie"
+           value="${ex.name}"
+           oninput="exercises[${i}].name=this.value" />
+    <button class="secondary" onclick="removeExercise(${i})">🗑</button>
+  </div>
 
-       <div style="margin-top:10px">
-         ${ex.sets.map((s, si) => `
-           <div class="set" style="flex-wrap:wrap">
 
-             <!-- KG -->
-             <button onclick="decWeight(${i},${si})">−</button>
-             <input type="number"
-                    step="0.5"
-                    inputmode="decimal"
-                    style="width:110px"
-                    value="${Number(s.weight) || 0}"
-                    oninput="setWeight(${i},${si}, this.value)" />
-             <button onclick="incWeight(${i},${si})">+</button>
-             <span class="muted" style="min-width:28px">kg</span>
+      <div style="margin-top:10px">
+        ${ex.sets.map((s, si) => `
+          <div class="set" style="flex-wrap:wrap">
+            <button onclick="decWeight(${i},${si})">−</button>
+            <input type="number" step="0.5" inputmode="decimal" style="width:110px"
+                   value="${Number(s.weight) || 0}"
+                   oninput="setWeight(${i},${si}, this.value)" />
+            <button onclick="incWeight(${i},${si})">+</button>
+            <span class="muted" style="min-width:28px">kg</span>
 
-             <!-- REPS -->
-             <button onclick="decReps(${i},${si})">−</button>
-             <input type="number"
-                    step="1"
-                    inputmode="numeric"
-                    style="width:80px"
-                    value="${Number(s.reps) || 0}"
-                    oninput="setReps(${i},${si}, this.value)" />
-             <button onclick="incReps(${i},${si})">+</button>
-             <span class="muted" style="min-width:44px">reps</span>
+            <button onclick="decReps(${i},${si})">−</button>
+            <input type="number" step="1" inputmode="numeric" style="width:80px"
+                   value="${Number(s.reps) || 0}"
+                   oninput="setReps(${i},${si}, this.value)" />
+            <button onclick="incReps(${i},${si})">+</button>
+            <span class="muted" style="min-width:44px">reps</span>
 
-             <!-- DS + DELETE -->
-             <span class="badge" onclick="toggleDrop(${i},${si})">${s.drop ? "DS ✓" : "DS"}</span>
-             <button class="secondary" onclick="removeSet(${i},${si})">❌</button>
+            <span class="badge" onclick="toggleDrop(${i},${si})">${s.drop ? "DS ✓" : "DS"}</span>
+            <button class="secondary" onclick="removeSet(${i},${si})">❌</button>
+          </div>
+        `).join("")}
+      </div>
 
-           </div>
-         `).join("")}
-       </div>
+      <button class="secondary" style="margin-top:8px" onclick="addSet('${ex.id}')">+ seria</button>
+    `;
 
-       <button class="secondary" style="margin-top:8px" onclick="addSet('${ex.id}')">+ seria</button>
-     `;
-
-     root.appendChild(div);
-   });
- }
-
+    root.appendChild(div);
+  });
+}
 
 // ===== SET UX =====
-// ===== SET UX =====
+function roundToStep(x, step){
+  const s = Number(step) || 0.5;
+  return Math.round(x / s) * s;
+}
+
 function incWeight(i, si) {
   exercises[i].sets[si].weight = roundToStep((Number(exercises[i].sets[si].weight) || 0) + weightStep, 0.5);
   render();
@@ -459,29 +493,51 @@ function decWeight(i, si) {
   exercises[i].sets[si].weight = Math.max(0, roundToStep((Number(exercises[i].sets[si].weight) || 0) - weightStep, 0.5));
   render();
 }
-
 function setWeight(i, si, val){
   const n = Number(val);
   exercises[i].sets[si].weight = Number.isFinite(n) ? roundToStep(n, 0.5) : 0;
+  render();
 }
 
 function incReps(i, si) { exercises[i].sets[si].reps = (Number(exercises[i].sets[si].reps) || 0) + 1; render(); }
 function decReps(i, si) { exercises[i].sets[si].reps = Math.max(0, (Number(exercises[i].sets[si].reps) || 0) - 1); render(); }
-
 function setReps(i, si, val){
   const n = Number(val);
   exercises[i].sets[si].reps = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  render();
 }
 
 function toggleDrop(i, si) { exercises[i].sets[si].drop = !exercises[i].sets[si].drop; render(); }
 function removeSet(i, si) { exercises[i].sets.splice(si, 1); render(); }
 
-// zaokrąglenie do np. 0.5
-function roundToStep(x, step){
-  const s = Number(step) || 0.5;
-  return Math.round(x / s) * s;
+function removeExercise(i){
+  if (!confirm("Usunąć to ćwiczenie?")) return;
+  exercises.splice(i, 1);
+  window.exercises = exercises;
+  render();
 }
 
+
+// ===== API HELPERS =====
+async function fetchWorkouts() {
+  const r = await fetch(`${API}/workouts?userId=${currentUserId}`);
+  if (!r.ok) throw new Error("Nie udało się pobrać historii");
+  const data = await r.json();
+  lastWorkoutsCache = data;
+  return data;
+}
+
+function renderHistory(data) {
+  const root = document.getElementById("history");
+  root.innerHTML = data.map(w => `
+    <div class="card" style="cursor:pointer"
+         onclick="showDay('${w.workoutDate}')">
+      <strong>${w.workoutDate}</strong> – ${w.templateName ?? ""}
+      <button class="secondary" style="float:right"
+              onclick="event.stopPropagation(); deleteWorkout('${w.id}')">🗑</button>
+    </div>
+  `).join("");
+}
 
 // ===== SAVE =====
 async function saveWorkout() {
@@ -528,14 +584,6 @@ async function saveWorkout() {
 
   alert("Zapisano 💪");
   clearWorkout();
-
-  try {
-    const data = await fetchWorkouts();
-    renderCalendar(data);
-    if (historyVisible) renderHistory(data);
-  } catch (e) {
-    console.warn(e);
-  }
 }
 
 // ===== HISTORY + CALENDAR =====
@@ -546,12 +594,13 @@ async function loadHistory() {
   }
 
   try {
-    const data = await fetchWorkouts();
-    renderHistory(data);
-    renderCalendar(data);
-    historyVisible = true;
+  const data = await fetchWorkouts();
+  renderHistory(data);
+  buildExercisePickerFromHistory(data);
+  jumpToLatestWorkoutMonth();
+  renderCalendar(data);
 
-    // przełącz na sekcję historii
+    historyVisible = true;
     showSection("history");
   } catch (e) {
     alert("Nie udało się wczytać historii");
@@ -563,9 +612,10 @@ function renderCalendar(workouts) {
   const cal = document.getElementById("calendar");
   cal.innerHTML = "";
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
+   const year = calYear;
+   const month = calMonth;
+
+   updateCalendarHeader();
 
   const firstDay = new Date(year, month, 1).getDay();
   const days = new Date(year, month + 1, 0).getDate();
@@ -597,6 +647,13 @@ async function showDay(date) {
   const root = document.getElementById("dayView");
   root.style.display = "block";
   root.innerHTML = `<h3>${date}</h3>`;
+  root.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px">
+      <h3 style="margin:0">${date}</h3>
+      <button class="secondary" onclick="document.getElementById('dayView').style.display='none'">Zamknij</button>
+    </div>
+  `;
+
 
   data.forEach(w => {
     if (w.notes) root.innerHTML += `<small>📝 ${w.notes}</small><br><br>`;
@@ -644,6 +701,21 @@ async function deleteWorkout(id) {
   }
 }
 
+function buildExercisePickerFromHistory(workouts){
+  const set = new Set();
+  workouts.forEach(w => (w.exercises ?? []).forEach(ex => {
+    if (ex.exerciseName) set.add(ex.exerciseName);
+  }));
+  const names = Array.from(set).sort((a,b)=>a.localeCompare(b,"pl"));
+
+  const sel = document.getElementById("progressSelect");
+  if(!sel) return;
+
+  sel.innerHTML = `<option value="">— wybierz ćwiczenie —</option>` +
+    names.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join("");
+}
+
+
 // ===== PROGRESS =====
 function loadProgress(name) {
   fetch(`${API}/stats/exercise?userId=${currentUserId}&name=${encodeURIComponent(name)}`)
@@ -678,23 +750,20 @@ function loadProgress(name) {
         }
       });
 
-      // przełącz na sekcję progresu
       showSection("progress");
       canvas.scrollIntoView({ behavior: "smooth", block: "center" });
     })
-    .catch(e => {
-      console.warn(e);
+    .catch(() => {
       alert("Brak danych do progresu albo błąd pobierania");
     });
 }
 
 // ===== INIT =====
 (async function init() {
-  // jeśli supabase nie działa, zostaw login i komunikat
   if (!sb) {
     showView("login");
     switchAuthTab("login");
-    setAuthMsg("Nie załadował się supabase-js. Sprawdź czy masz <script ...supabase-js...> przed script.js.");
+    setAuthMsg("Nie załadował się supabase-js. Sprawdź czy skrypt supabase-js jest nad script.js.");
     return;
   }
 
@@ -705,18 +774,21 @@ function loadProgress(name) {
     if (user) {
       currentUserId = user.id;
       currentEmail = user.email;
+
+      resetAppState();
       showView("app");
       showSection("new");
+      await loadMyTemplates().catch(()=>{});
     } else {
+      resetAppState();
       showView("login");
       switchAuthTab("login");
     }
   } catch (e) {
+    resetAppState();
     showView("login");
     switchAuthTab("login");
-    console.warn(e);
   }
-
 })();
 
 // ===== expose for onclick =====
@@ -726,9 +798,13 @@ window.login = login;
 window.register = register;
 window.logout = logout;
 window.continueAsGuest = continueAsGuest;
+window.removeExercise = removeExercise;
+
 
 window.showSection = showSection;
 window.toggleCalendar = toggleCalendar;
+window.prevMonth = prevMonth;
+window.nextMonth = nextMonth;
 
 window.addExercise = addExercise;
 window.addSet = addSet;
@@ -739,12 +815,14 @@ window.loadHistory = loadHistory;
 window.showDay = showDay;
 window.deleteWorkout = deleteWorkout;
 window.loadProgress = loadProgress;
+
 window.setWeightStep = setWeightStep;
 window.setWeight = setWeight;
 window.setReps = setReps;
+
 window.applyTemplate = applyTemplate;
 window.loadMyTemplates = loadMyTemplates;
 window.saveAsTemplate = saveAsTemplate;
 
-
-
+// ważne: oninput w HTML używa "exercises[...]"
+window.exercises = exercises;

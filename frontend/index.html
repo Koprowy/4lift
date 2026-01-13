@@ -121,7 +121,15 @@
                 <div id="history" style="margin-top:12px"></div>
             </div>
 
+
+
+
             <div id="calendarCard" class="card" style="display:none">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px">
+                    <button class="secondary" onclick="prevMonth()">←</button>
+                    <div id="calendarTitle" style="font-weight:700; text-align:center; flex:1"></div>
+                    <button class="secondary" onclick="nextMonth()">→</button>
+                </div>
                 <h3>Kalendarz</h3>
                 <div id="calendar" class="calendar"></div>
             </div>
@@ -133,6 +141,9 @@
         <section id="section-progress" style="display:none">
             <div class="card">
                 <h3 id="chartTitle">Progres</h3>
+                <select id="progressSelect" onchange="if(this.value) loadProgress(this.value)">
+                    <option value="">— wybierz ćwiczenie —</option>
+                </select>
                 <small id="chartHint" class="muted">Kliknij ćwiczenie w podglądzie dnia (Historia → dzień)</small>
                 <br><br>
                 <canvas id="chart" height="220"></canvas>
