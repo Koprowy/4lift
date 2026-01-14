@@ -9,6 +9,12 @@ const sb = (window.supabase && window.supabase.createClient)
   : null;
 
 // ===== STATE =====
+const AUTOSAVE_KEY = "fourlift_draft_v1";
+let autosaveTimer = null;
+let autosaveEnabled = true;
+
+let progressAutoLoading = false;
+
 let currentUserId = null;   // supabase user.id albo null (gość)
 let currentEmail = null;
 
@@ -65,6 +71,70 @@ const DEFAULT_TEMPLATES = {
 };
 
 // ===== UI HELPERS =====
+function getDraftPayload(){
+  return {
+    v: 1,
+    savedAt: new Date().toISOString(),
+    template: document.getElementById("template")?.value || "",
+    notes: document.getElementById("notes")?.value || "",
+    weightStep,
+    exercises
+  };
+}
+
+function scheduleAutosave(){
+  if(!autosaveEnabled) return;
+  if(autosaveTimer) clearTimeout(autosaveTimer);
+
+  autosaveTimer = setTimeout(() => {
+    try{
+      const payload = getDraftPayload();
+      // zapisuj tylko jeśli coś istnieje
+      const hasSomething =
+        payload.template.trim() ||
+        payload.notes.trim() ||
+        (payload.exercises && payload.exercises.length > 0);
+
+      if(hasSomething){
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(payload));
+      } else {
+        localStorage.removeItem(AUTOSAVE_KEY);
+      }
+    } catch(e){
+      console.warn("autosave failed", e);
+    }
+  }, 600); // debounce
+}
+
+function clearDraft(){
+  localStorage.removeItem(AUTOSAVE_KEY);
+}
+
+function tryRestoreDraft(){
+  const raw = localStorage.getItem(AUTOSAVE_KEY);
+  if(!raw) return;
+
+  let draft;
+  try { draft = JSON.parse(raw); } catch { return; }
+
+  const when = draft.savedAt ? new Date(draft.savedAt).toLocaleString() : "ostatnio";
+  if(!confirm(`Masz zapisany niedokończony trening (${when}). Przywrócić?`)) return;
+
+  // przywróć state
+  weightStep = Number(draft.weightStep) || weightStep;
+  exercises = Array.isArray(draft.exercises) ? draft.exercises : [];
+  window.exercises = exercises;
+
+  // przywróć inputy
+  const t = document.getElementById("template");
+  const n = document.getElementById("notes");
+  if(t) t.value = draft.template || "";
+  if(n) n.value = draft.notes || "";
+
+  render();
+}
+
+
 function setAuthMsg(msg) {
   const el = document.getElementById("authMsg");
   if (el) el.textContent = msg || "";
@@ -90,6 +160,37 @@ function switchAuthTab(tab) {
   document.getElementById("tab-register").classList.toggle("active", !isLogin);
   setAuthMsg("");
 }
+
+function buildProgressExerciseSelect(workouts){
+  const set = new Set();
+
+  workouts.forEach(w => {
+    (w.exercises ?? []).forEach(ex => {
+      if (ex.exerciseName) set.add(ex.exerciseName);
+    });
+  });
+
+  const names = Array.from(set).sort((a,b)=>a.localeCompare(b,"pl"));
+  const sel = document.getElementById("progressSelect");
+  if(!sel) return;
+
+  sel.innerHTML = `<option value="">— wybierz ćwiczenie —</option>` +
+    names.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join("");
+
+  // przywróć ostatni wybór
+  const last = localStorage.getItem("lastProgressExercise");
+  if(last && names.includes(last)){
+    sel.value = last;
+    // nie ładujemy tu wykresu
+  }
+
+}
+function onProgressSelect(name){
+  if(!name) return;
+  localStorage.setItem("lastProgressExercise", name);
+  loadProgress(name);
+}
+
 
 
 function showView(name) {
@@ -118,6 +219,19 @@ function showSection(sec) {
     document.getElementById(`section-${s}`).style.display = (s === sec) ? "block" : "none";
     document.getElementById(`nav-${s}`).classList.toggle("active", s === sec);
   });
+
+  if (sec === "progress" && !progressAutoLoading) {
+    progressAutoLoading = true;
+
+    const sel = document.getElementById("progressSelect");
+    const picked = sel?.value?.trim();
+    const last = (localStorage.getItem("lastProgressExercise") || "").trim();
+    const toLoad = picked || last;
+
+    if (toLoad) loadProgress(toLoad);
+
+    progressAutoLoading = false;
+  }
 }
 
 const MONTHS_PL = [
@@ -282,6 +396,8 @@ function addExercise() {
   });
   window.exercises = exercises;
   render();
+  scheduleAutosave();
+
 }
 
 function addSet(exId) {
@@ -289,6 +405,8 @@ function addSet(exId) {
   ex.sets.push({ weight: 0, reps: 0, drop: false });
   window.exercises = exercises;
   render();
+  scheduleAutosave();
+
 }
 
 function clearWorkout() {
@@ -297,6 +415,8 @@ function clearWorkout() {
   document.getElementById("template").value = "";
   document.getElementById("notes").value = "";
   render();
+  scheduleAutosave();
+
 }
 
 // ===== TEMPLATES =====
@@ -347,6 +467,8 @@ function applyTemplate(key){
 
     window.exercises = exercises;
     render();
+    scheduleAutosave();
+
     return;
   }
 
@@ -488,33 +610,43 @@ function roundToStep(x, step){
 function incWeight(i, si) {
   exercises[i].sets[si].weight = roundToStep((Number(exercises[i].sets[si].weight) || 0) + weightStep, 0.5);
   render();
+  scheduleAutosave();
+
 }
 function decWeight(i, si) {
   exercises[i].sets[si].weight = Math.max(0, roundToStep((Number(exercises[i].sets[si].weight) || 0) - weightStep, 0.5));
   render();
+  scheduleAutosave();
+
 }
 function setWeight(i, si, val){
   const n = Number(val);
   exercises[i].sets[si].weight = Number.isFinite(n) ? roundToStep(n, 0.5) : 0;
   render();
+  scheduleAutosave();
+
 }
 
-function incReps(i, si) { exercises[i].sets[si].reps = (Number(exercises[i].sets[si].reps) || 0) + 1; render(); }
-function decReps(i, si) { exercises[i].sets[si].reps = Math.max(0, (Number(exercises[i].sets[si].reps) || 0) - 1); render(); }
+function incReps(i, si) { exercises[i].sets[si].reps = (Number(exercises[i].sets[si].reps) || 0) + 1; render(); scheduleAutosave();  }
+function decReps(i, si) { exercises[i].sets[si].reps = Math.max(0, (Number(exercises[i].sets[si].reps) || 0) - 1); render(); scheduleAutosave(); }
 function setReps(i, si, val){
   const n = Number(val);
   exercises[i].sets[si].reps = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
   render();
+  scheduleAutosave();
+
 }
 
-function toggleDrop(i, si) { exercises[i].sets[si].drop = !exercises[i].sets[si].drop; render(); }
-function removeSet(i, si) { exercises[i].sets.splice(si, 1); render(); }
+function toggleDrop(i, si) { exercises[i].sets[si].drop = !exercises[i].sets[si].drop; render(); scheduleAutosave(); }
+function removeSet(i, si) { exercises[i].sets.splice(si, 1); render(); scheduleAutosave(); }
 
 function removeExercise(i){
   if (!confirm("Usunąć to ćwiczenie?")) return;
   exercises.splice(i, 1);
   window.exercises = exercises;
   render();
+  scheduleAutosave();
+
 }
 
 
@@ -533,6 +665,10 @@ function renderHistory(data) {
     <div class="card" style="cursor:pointer"
          onclick="showDay('${w.workoutDate}')">
       <strong>${w.workoutDate}</strong> – ${w.templateName ?? ""}
+
+      <button class="secondary" style="float:right; margin-left:8px"
+              onclick="event.stopPropagation(); repeatWorkout('${w.workoutDate}')">↩ Powtórz</button>
+
       <button class="secondary" style="float:right"
               onclick="event.stopPropagation(); deleteWorkout('${w.id}')">🗑</button>
     </div>
@@ -584,9 +720,64 @@ async function saveWorkout() {
 
   alert("Zapisano 💪");
   clearWorkout();
+  clearDraft();
+
 }
 
 // ===== HISTORY + CALENDAR =====
+async function repeatWorkout(date){
+  if(!currentUserId){
+    alert("Zaloguj się, żeby powtarzać trening 🙂");
+    return;
+  }
+
+  const r = await fetch(`${API}/workouts/day?userId=${currentUserId}&date=${date}`);
+  if(!r.ok){
+    alert("Nie udało się pobrać treningu do powtórzenia");
+    return;
+  }
+
+  const day = await r.json();
+  if(!Array.isArray(day) || day.length === 0){
+    alert("Brak treningu w tym dniu");
+    return;
+  }
+
+  // Jeśli danego dnia było kilka treningów, bierzemy ostatni (najczęściej “najpełniejszy”)
+  const w = day[day.length - 1];
+
+  // Ustaw nagłówek treningu
+  const t = document.getElementById("template");
+  const n = document.getElementById("notes");
+  if(t) t.value = w.templateName ?? "";
+  if(n) n.value = ""; // notatka nowa
+
+  // Przenieś ćwiczenia do formatu frontu
+  exercises = (w.exercises ?? [])
+    .sort((a,b)=> (a.exerciseOrder ?? 0) - (b.exerciseOrder ?? 0))
+    .map(ex => ({
+      id: crypto.randomUUID(),
+      name: (ex.exerciseName ?? "").trim(),
+      sets: (ex.sets ?? [])
+        .sort((a,b)=> (a.setOrder ?? 0) - (b.setOrder ?? 0))
+        .map(s => ({
+          weight: Number(s.weight) || 0,  // ✅ KOKS: kopiujemy ciężar
+          reps: Number(s.reps) || 0,
+          drop: (s.drop === true) || (s.isDrop === true)
+        }))
+    }));
+
+  window.exercises = exercises;
+  render();
+
+  // autosave (jeśli masz)
+  if (typeof scheduleAutosave === "function") scheduleAutosave();
+
+  showSection("new");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+
 async function loadHistory() {
   if (!currentUserId) {
     alert("Gość nie ma historii. Zaloguj się 🙂");
@@ -596,12 +787,13 @@ async function loadHistory() {
   try {
   const data = await fetchWorkouts();
   renderHistory(data);
-  buildExercisePickerFromHistory(data);
+  buildProgressExerciseSelect(data);
   jumpToLatestWorkoutMonth();
   renderCalendar(data);
 
-    historyVisible = true;
-    showSection("history");
+  historyVisible = true;
+  showSection("history");
+
   } catch (e) {
     alert("Nie udało się wczytać historii");
     console.warn(e);
@@ -638,6 +830,24 @@ function renderCalendar(workouts) {
       </div>`;
   }
 }
+function goToProgress(name){
+  name = String(name || "").trim();
+  if(!name) return;
+
+  // ustaw dropdown (żeby UI się zgadzało)
+  const sel = document.getElementById("progressSelect");
+  if(sel){
+    sel.value = name;
+  }
+  localStorage.setItem("lastProgressExercise", name);
+
+  // przełącz widok
+  showSection("progress");
+
+  // po przełączeniu (DOM już jest), ładuj wykres
+  setTimeout(() => loadProgress(name), 0);
+}
+
 
 async function showDay(date) {
   const r = await fetch(`${API}/workouts/day?userId=${currentUserId}&date=${date}`);
@@ -646,7 +856,6 @@ async function showDay(date) {
   const data = await r.json();
   const root = document.getElementById("dayView");
   root.style.display = "block";
-  root.innerHTML = `<h3>${date}</h3>`;
   root.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px">
       <h3 style="margin:0">${date}</h3>
@@ -662,7 +871,7 @@ async function showDay(date) {
       const safeName = String(ex.exerciseName ?? "").replace(/'/g, "\\'");
       root.innerHTML += `
         <strong style="cursor:pointer; text-decoration:underline"
-                onclick="loadProgress('${safeName}')"
+               onclick="goToProgress('${safeName}')"
                 title="Kliknij żeby zobaczyć progres">
           ${ex.exerciseName}
         </strong><br>
@@ -701,31 +910,33 @@ async function deleteWorkout(id) {
   }
 }
 
-function buildExercisePickerFromHistory(workouts){
-  const set = new Set();
-  workouts.forEach(w => (w.exercises ?? []).forEach(ex => {
-    if (ex.exerciseName) set.add(ex.exerciseName);
-  }));
-  const names = Array.from(set).sort((a,b)=>a.localeCompare(b,"pl"));
-
-  const sel = document.getElementById("progressSelect");
-  if(!sel) return;
-
-  sel.innerHTML = `<option value="">— wybierz ćwiczenie —</option>` +
-    names.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join("");
-}
-
 
 // ===== PROGRESS =====
 function loadProgress(name) {
+  name = String(name || "").trim();
+  if (!name) return;
+
+
+
+  // dopiero teraz łap canvas
+  const canvas = document.getElementById("chart");
+  if (!canvas) {
+    console.warn("Brak <canvas id='chart'> w DOM. Sprawdź index.html");
+    alert("Brakuje wykresu (canvas #chart). Sprawdź HTML.");
+    return;
+  }
+  const ctx = canvas.getContext("2d");
+
   fetch(`${API}/stats/exercise?userId=${currentUserId}&name=${encodeURIComponent(name)}`)
-    .then(r => {
-      if (!r.ok) throw new Error("Nie udało się pobrać progresu");
+    .then(async r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     })
     .then(data => {
-      const canvas = document.getElementById("chart");
-      const ctx = canvas.getContext("2d");
+      if (!Array.isArray(data) || data.length === 0) {
+        alert("Brak danych do progresu dla tego ćwiczenia (jeszcze 🙂)");
+        return;
+      }
 
       const labels = data.map(d => d.date);
       const values = data.map(d => Number(d.maxWeight));
@@ -734,29 +945,18 @@ function loadProgress(name) {
 
       chartInstance = new Chart(ctx, {
         type: "line",
-        data: {
-          labels,
-          datasets: [{
-            label: `${name} – max kg`,
-            data: values,
-            borderWidth: 3,
-            tension: 0.2
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: true } },
-          scales: { y: { beginAtZero: true } }
-        }
+        data: { labels, datasets: [{ label: `${name} – max kg`, data: values, borderWidth: 3, tension: 0.2 }] },
+        options: { responsive: true, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
       });
 
-      showSection("progress");
       canvas.scrollIntoView({ behavior: "smooth", block: "center" });
     })
-    .catch(() => {
-      alert("Brak danych do progresu albo błąd pobierania");
+    .catch((e) => {
+      console.warn("loadProgress error:", e);
+      alert("Błąd pobierania progresu (sprawdź console/network).");
     });
 }
+
 
 // ===== INIT =====
 (async function init() {
@@ -778,6 +978,8 @@ function loadProgress(name) {
       resetAppState();
       showView("app");
       showSection("new");
+      tryRestoreDraft();
+
       await loadMyTemplates().catch(()=>{});
     } else {
       resetAppState();
@@ -810,6 +1012,8 @@ window.addExercise = addExercise;
 window.addSet = addSet;
 window.clearWorkout = clearWorkout;
 window.saveWorkout = saveWorkout;
+window.onProgressSelect = onProgressSelect;
+
 
 window.loadHistory = loadHistory;
 window.showDay = showDay;
@@ -826,3 +1030,6 @@ window.saveAsTemplate = saveAsTemplate;
 
 // ważne: oninput w HTML używa "exercises[...]"
 window.exercises = exercises;
+window.goToProgress = goToProgress;
+window.repeatWorkout = repeatWorkout;
+
