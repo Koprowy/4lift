@@ -2,7 +2,6 @@
 const API = "http://localhost:8080/api";
 
 
-
 // Supabase client (bez kolizji nazw)
 const sb = (window.supabase && window.supabase.createClient)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -284,6 +283,56 @@ function jumpToLatestWorkoutMonth(){
   calYear = y;
   calMonth = m - 1;
 }
+//AI SEARCHER
+a// AI SEARCHER (FREE + odporne na błędy)
+ async function openExerciseHelp(exName) {
+   exName = String(exName || "").trim();
+
+   // 1) pusta nazwa -> stop
+   if (!exName) {
+     alert("Najpierw wpisz nazwę ćwiczenia 🙂");
+     return;
+   }
+
+   // helper: zawsze mamy awaryjny link do wyszukiwania
+   const fallbackUrl =
+     `https://www.youtube.com/results?search_query=${encodeURIComponent(exName + " technika")}`;
+
+   try {
+     const url = `${API}/coach/youtube?text=${encodeURIComponent(exName)}&lang=pl`;
+     const res = await fetch(url);
+
+     // 2) backend mówi "nie wiem" -> 204
+     if (res.status === 204) {
+       // zamiast tylko alert, możesz też od razu puścić wyszukiwanie
+       if (confirm("Nie jestem pewien, o jakie ćwiczenie chodzi. Otworzyć wyszukiwanie na YouTube?")) {
+         window.open(fallbackUrl, "_blank");
+       }
+       return;
+     }
+
+     // 3) inne błędy HTTP
+     if (!res.ok) {
+       console.warn("coach/youtube error:", res.status);
+       // fallback do zwykłego wyszukiwania
+       window.open(fallbackUrl, "_blank");
+       return;
+     }
+
+     const data = await res.json();
+
+     // jeśli backend zwrócił coś dziwnego/bez url
+     const finalUrl = (data && data.url) ? data.url : fallbackUrl;
+     window.open(finalUrl, "_blank");
+
+   } catch (e) {
+     // 4) backend nie działa / CORS / network -> fallback
+     console.warn("openExerciseHelp fetch failed:", e);
+     window.open(fallbackUrl, "_blank");
+   }
+ }
+
+window.openExerciseHelp = openExerciseHelp;
 
 
 // ===== RESET (naprawia “duchy”) =====
@@ -558,47 +607,59 @@ function render() {
     root.appendChild(stepCard);
   }
 
-  exercises.forEach((ex, i) => {
-    const div = document.createElement("div");
-    div.className = "card exercise";
+exercises.forEach((ex, i) => {
+  const div = document.createElement("div");
+  div.className = "card exercise";
 
-div.innerHTML = `
-  <div style="display:flex; gap:10px; align-items:center">
-    <input style="flex:1" placeholder="Ćwiczenie"
-           value="${ex.name}"
-           oninput="exercises[${i}].name=this.value" />
-    <button class="secondary" onclick="removeExercise(${i})">🗑</button>
-  </div>
+  const safeName = String(ex.name ?? "")
+    .replace(/&/g,"&amp;")
+    .replace(/"/g,"&quot;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;");
+
+  div.innerHTML = `
+    <div style="display:flex; gap:10px; align-items:center">
+      <input style="flex:1" placeholder="Ćwiczenie"
+             value="${safeName}"
+             oninput="setExerciseName(${i}, this.value)" />
+
+      <button class="secondary"
+              title="Instruktaż na YouTube"
+              onclick="openExerciseHelp(exercises[${i}].name)">🎥</button>
+
+      <button class="secondary" onclick="removeExercise(${i})">🗑</button>
+    </div>
+
+    <div style="margin-top:10px">
+      ${ex.sets.map((s, si) => `
+        <div class="set" style="flex-wrap:wrap">
+          <button onclick="decWeight(${i},${si})">−</button>
+          <input type="number" step="0.5" inputmode="decimal" style="width:110px"
+                 value="${Number(s.weight) || 0}"
+                 oninput="setWeight(${i},${si}, this.value)" />
+          <button onclick="incWeight(${i},${si})">+</button>
+          <span class="muted" style="min-width:28px">kg</span>
+
+          <button onclick="decReps(${i},${si})">−</button>
+          <input type="number" step="1" inputmode="numeric" style="width:80px"
+                 value="${Number(s.reps) || 0}"
+                 oninput="setReps(${i},${si}, this.value)" />
+          <button onclick="incReps(${i},${si})">+</button>
+          <span class="muted" style="min-width:44px">reps</span>
+
+          <span class="badge" onclick="toggleDrop(${i},${si})">${s.drop ? "DS ✓" : "DS"}</span>
+          <button class="secondary" onclick="removeSet(${i},${si})">❌</button>
+        </div>
+      `).join("")}
+    </div>
+
+    <button class="secondary" style="margin-top:8px" onclick="addSet('${ex.id}')">+ seria</button>
+  `;
+
+  root.appendChild(div);
+});
 
 
-      <div style="margin-top:10px">
-        ${ex.sets.map((s, si) => `
-          <div class="set" style="flex-wrap:wrap">
-            <button onclick="decWeight(${i},${si})">−</button>
-            <input type="number" step="0.5" inputmode="decimal" style="width:110px"
-                   value="${Number(s.weight) || 0}"
-                   oninput="setWeight(${i},${si}, this.value)" />
-            <button onclick="incWeight(${i},${si})">+</button>
-            <span class="muted" style="min-width:28px">kg</span>
-
-            <button onclick="decReps(${i},${si})">−</button>
-            <input type="number" step="1" inputmode="numeric" style="width:80px"
-                   value="${Number(s.reps) || 0}"
-                   oninput="setReps(${i},${si}, this.value)" />
-            <button onclick="incReps(${i},${si})">+</button>
-            <span class="muted" style="min-width:44px">reps</span>
-
-            <span class="badge" onclick="toggleDrop(${i},${si})">${s.drop ? "DS ✓" : "DS"}</span>
-            <button class="secondary" onclick="removeSet(${i},${si})">❌</button>
-          </div>
-        `).join("")}
-      </div>
-
-      <button class="secondary" style="margin-top:8px" onclick="addSet('${ex.id}')">+ seria</button>
-    `;
-
-    root.appendChild(div);
-  });
 }
 
 // ===== SET UX =====
@@ -646,8 +707,12 @@ function removeExercise(i){
   window.exercises = exercises;
   render();
   scheduleAutosave();
-
 }
+function setExerciseName(i, val){
+  exercises[i].name = val;
+  scheduleAutosave();
+}
+window.setExerciseName = setExerciseName;
 
 
 // ===== API HELPERS =====
@@ -956,6 +1021,24 @@ function loadProgress(name) {
       alert("Błąd pobierania progresu (sprawdź console/network).");
     });
 }
+function openHelpForCurrentExercise(){
+  // 1) spróbuj wziąć nazwę pierwszego ćwiczenia z listy
+  let exName = "";
+  if (Array.isArray(exercises) && exercises.length > 0) {
+    exName = String(exercises[0].name || "").trim();
+  }
+
+  // 2) jak puste, zapytaj usera
+  if (!exName) {
+    exName = prompt("Podaj nazwę ćwiczenia (np. klata ława / przysiady / ohp):", "");
+    if (!exName) return;
+  }
+
+  // 3) odpal istniejącą funkcję (ta już masz)
+  openExerciseHelp(exName);
+}
+window.openHelpForCurrentExercise = openHelpForCurrentExercise;
+
 
 
 // ===== INIT =====
