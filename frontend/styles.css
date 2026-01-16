@@ -375,3 +375,46 @@ h3{ font-size: 18px; }
   .card-header .row > *{ flex:1; }
 }
 
+.layout { display:flex; gap:16px; align-items:flex-start; }
+
+.sidebar{
+  width:220px;
+  position:sticky;
+  top:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.sidebtn{
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid #2a2a2a;
+  background:#121212;
+  color:#eee;
+  text-align:left;
+  cursor:pointer;
+}
+
+.sidebtn.active{
+  border-color:#2ecc71;
+}
+
+.content{
+  flex:1;
+  min-width:0;
+}
+
+@media (max-width: 900px){
+  .layout{ flex-direction:column; }
+  .sidebar{
+    width:100%;
+    flex-direction:row;
+  }
+  .sidebtn{
+    flex:1;
+    text-align:center;
+  }
+}
+
+

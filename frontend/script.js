@@ -20,6 +20,9 @@ let currentEmail = null;
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth(); // 0-11
 
+let historyLimit = 4;
+const HISTORY_STEP = 4;
+
 let myTemplates = [];
 let exercises = [];
 
@@ -80,6 +83,38 @@ function getDraftPayload(){
     exercises
   };
 }
+
+function toggleNotes(){
+  const el = document.getElementById("notes");
+  if(!el) return;
+  el.style.display = (el.style.display === "none" || !el.style.display) ? "block" : "none";
+}
+window.toggleNotes = toggleNotes;
+
+
+// ==== ZENQUOTES MOTYWACJA ====
+async function loadMotivation() {
+  const el = document.getElementById("motivationText");
+  if (el) el.textContent = "Ładuję...";
+
+  try {
+    const r = await fetch(`${API}/motivation/random`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    const arr = await r.json(); // ZenQuotes zwraca tablicę
+    const q = arr?.[0]?.q;
+    const a = arr?.[0]?.a;
+
+    if (!q) throw new Error("Bad response");
+
+    if (el) el.textContent = `“${q}” — ${a || "Unknown"}`;
+  } catch (e) {
+    console.warn("loadMotivation error:", e);
+    if (el) el.textContent = "Nie udało się pobrać cytatu 😅 Spróbuj jeszcze raz.";
+  }
+}
+window.loadMotivation = loadMotivation;
+
 
 function scheduleAutosave(){
   if(!autosaveEnabled) return;
@@ -726,7 +761,12 @@ async function fetchWorkouts() {
 
 function renderHistory(data) {
   const root = document.getElementById("history");
-  root.innerHTML = data.map(w => `
+  if (!root) return;
+
+  const total = Array.isArray(data) ? data.length : 0;
+  const visible = Math.min(historyLimit, total);
+
+  const items = (data || []).slice(0, visible).map(w => `
     <div class="card" style="cursor:pointer"
          onclick="showDay('${w.workoutDate}')">
       <strong>${w.workoutDate}</strong> – ${w.templateName ?? ""}
@@ -738,7 +778,34 @@ function renderHistory(data) {
               onclick="event.stopPropagation(); deleteWorkout('${w.id}')">🗑</button>
     </div>
   `).join("");
+
+  let controls = "";
+  if (total > HISTORY_STEP) {
+    controls = `
+      <div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:10px">
+        <small class="muted">Pokazuję ${visible} z ${total}</small>
+        <div style="display:flex; gap:10px">
+          ${visible < total ? `<button class="secondary" onclick="showMoreHistory()">Pokaż więcej</button>` : ""}
+          ${historyLimit > HISTORY_STEP ? `<button class="secondary" onclick="collapseHistory()">Zwiń</button>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  root.innerHTML = items + controls;
 }
+function showMoreHistory(){
+  historyLimit += HISTORY_STEP;
+  renderHistory(lastWorkoutsCache);
+}
+function collapseHistory(){
+  historyLimit = HISTORY_STEP;
+  renderHistory(lastWorkoutsCache);
+}
+window.showMoreHistory = showMoreHistory;
+window.collapseHistory = collapseHistory;
+
+
 
 // ===== SAVE =====
 async function saveWorkout() {
@@ -788,6 +855,8 @@ async function saveWorkout() {
   clearDraft();
 
 }
+
+
 
 // ===== HISTORY + CALENDAR =====
 async function repeatWorkout(date){
@@ -851,6 +920,8 @@ async function loadHistory() {
 
   try {
   const data = await fetchWorkouts();
+  historyLimit = HISTORY_STEP;
+
   renderHistory(data);
   buildProgressExerciseSelect(data);
   jumpToLatestWorkoutMonth();

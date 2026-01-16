@@ -53,127 +53,160 @@
     <!-- ===== VIEW: APP ===== -->
     <section id="view-app" style="display:none">
 
-        <!-- NAV -->
-        <div class="nav pills">
-            <button id="nav-new" class="navbtn active" onclick="showSection('new')">Nowy trening</button>
-            <button id="nav-history" class="navbtn" onclick="showSection('history')">Historia</button>
-            <button id="nav-progress" class="navbtn" onclick="showSection('progress')">Progres</button>
-        </div>
+        <div class="layout">
 
-        <!-- ===== NEW ===== -->
-        <section id="section-new" class="stack">
+            <!-- SIDEBAR -->
+            <aside class="sidebar">
+                <button id="nav-new" class="sidebtn active" onclick="showSection('new')">🏋️ Panel ćwiczeń</button>
+                <button id="nav-history" class="sidebtn" onclick="showSection('history')">📅 Historia</button>
+                <button id="nav-progress" class="sidebtn" onclick="showSection('progress')">📈 Progres</button>
+            </aside>
 
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h3 style="margin:0">Nowy trening</h3>
-                        <div class="muted" style="margin-top:4px">Szybkie wpisywanie, minimum klikania</div>
+            <!-- CONTENT -->
+            <div class="content">
+
+                <!-- ===== NEW ===== -->
+                <section id="section-new" class="stack">
+
+                    <!-- MOTYWACJA -->
+                    <div class="card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px">
+                            <div>
+                                <strong>Motywacja</strong><br>
+                                <small class="muted" id="motivationText">Kliknij, żeby wylosować cytat.</small>
+                            </div>
+                            <button class="secondary" onclick="loadMotivation()">🔥 Losuj</button>
+                        </div>
                     </div>
-                </div>
 
-                <div class="stack-sm">
-                    <input id="template" placeholder="Nazwa treningu (np. PUSH / PULL / LEGS)" />
+                    <!-- NOWY TRENING -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 style="margin:0">Nowy trening</h3>
+                                <div class="muted" style="margin-top:4px">Szybkie wpisywanie, minimum klikania</div>
+                            </div>
+                        </div>
 
-                    <div class="row">
-                        <select id="templateSelect" onchange="applyTemplate(this.value)">
-                            <option value="">— Wybierz gotowy trening —</option>
-                            <option value="PUSH_A">PUSH A (klata/barki/tric)</option>
-                            <option value="PULL_A">PULL A (plecy/bic)</option>
-                            <option value="LEGS_A">LEGS A (nogi)</option>
-                            <option value="FULLBODY_A">FULL BODY A</option>
+                        <div class="stack-sm">
+                            <input id="template" placeholder="Nazwa treningu" />
+
+                            <div class="row">
+                                <select id="templateSelect" onchange="applyTemplate(this.value)">
+                                    <option value="">— Wybierz gotowy trening —</option>
+                                    <option value="PUSH_A">PUSH A (klata/barki/tric)</option>
+                                    <option value="PULL_A">PULL A (plecy/bic)</option>
+                                    <option value="LEGS_A">LEGS A (nogi)</option>
+                                    <option value="FULLBODY_A">FULL BODY A</option>
+                                </select>
+
+                                <button class="secondary"
+                                        onclick="applyTemplate(document.getElementById('templateSelect').value)">
+                                    Użyj
+                                </button>
+                            </div>
+
+                            <div class="muted">
+                                Tip: po załadowaniu możesz usuwać/dodawać ćwiczenia i serie normalnie.
+                            </div>
+
+                            <div class="row">
+                                <button onclick="addExercise()">➕ Dodaj ćwiczenie</button>
+                                <button class="btn" onclick="openHelpForCurrentExercise()">🎥 Instruktaż</button>
+                                <button class="secondary" onclick="clearWorkout()">Wyczyść</button>
+                            </div>
+
+                            <div class="row">
+                                <button class="secondary" onclick="saveAsTemplate()">💾 Zapisz jako mój szablon</button>
+                                <button class="secondary" onclick="loadMyTemplates()">🔄 Odśwież moje szablony</button>
+                            </div>
+
+                            <p id="guestHint" class="muted" style="display:none;margin-top:10px">
+                                Jesteś jako gość – trening nie zapisze się w bazie.
+                                <br><br>
+                                <button class="secondary" onclick="goToLogin()">Zaloguj / Załóż konto</button>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- ĆWICZENIA -->
+                    <div id="exercises" class="stack"></div>
+
+                    <!-- NOTATKA + ZAPIS -->
+                    <div class="card">
+                        <button class="secondary" onclick="toggleNotes()">📝 Notatka</button>
+
+                        <textarea id="notes"
+                                  placeholder="Notatka (opcjonalna)"
+                                  style="height:84px; display:none; margin-top:10px"></textarea>
+
+                        <div style="margin-top:12px">
+                            <button onclick="saveWorkout()">💾 Zapisz trening</button>
+                        </div>
+                    </div>
+
+                </section>
+
+                <!-- ===== HISTORY ===== -->
+                <section id="section-history" class="stack" style="display:none">
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 style="margin:0">Historia</h3>
+                                <div class="muted" style="margin-top:4px">
+                                    Kliknij wpis, żeby zobaczyć szczegóły
+                                </div>
+                            </div>
+                            <div class="row">
+                                <button class="secondary" onclick="loadHistory()">Odśwież</button>
+                                <button class="secondary" onclick="toggleCalendar()">Kalendarz</button>
+                            </div>
+                        </div>
+
+                        <div id="history" class="stack-sm" style="margin-top:12px"></div>
+                    </div>
+
+                    <div id="calendarCard" class="card" style="display:none">
+                        <div class="calendar-head">
+                            <button class="secondary" onclick="prevMonth()">←</button>
+                            <div id="calendarTitle" class="calendar-title"></div>
+                            <button class="secondary" onclick="nextMonth()">→</button>
+                        </div>
+
+                        <div class="muted" style="margin-bottom:10px">
+                            Zielone dni = był trening. Kliknij dzień, żeby podejrzeć.
+                        </div>
+                        <div id="calendar" class="calendar"></div>
+                    </div>
+
+                    <div id="dayView" class="card" style="display:none"></div>
+                </section>
+
+                <!-- ===== PROGRESS ===== -->
+                <section id="section-progress" class="stack" style="display:none">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 style="margin:0">Progres</h3>
+                                <div class="muted" style="margin-top:4px">
+                                    Wybierz ćwiczenie i zobacz trend
+                                </div>
+                            </div>
+                        </div>
+
+                        <select id="progressSelect" onchange="onProgressSelect(this.value)">
+                            <option value="">— wybierz ćwiczenie —</option>
                         </select>
-
-                        <button class="secondary" onclick="applyTemplate(document.getElementById('templateSelect').value)">
-                            Użyj
-                        </button>
                     </div>
 
-                    <div class="muted">Tip: po załadowaniu możesz usuwać/dodawać ćwiczenia i serie normalnie.</div>
-
-                    <div class="row">
-                        <button onclick="addExercise()">➕ Dodaj ćwiczenie</button>
-                        <button class="btn" onclick="openHelpForCurrentExercise()">Instruktaż</button>
-
-                        <button class="secondary" onclick="clearWorkout()">Wyczyść</button>
+                    <div class="card">
+                        <canvas id="chart" style="width:100%; max-height:340px;"></canvas>
                     </div>
+                </section>
 
-                    <div class="row">
-                        <button class="secondary" onclick="saveAsTemplate()">💾 Zapisz jako mój szablon</button>
-                        <button class="secondary" onclick="loadMyTemplates()">🔄 Odśwież moje szablony</button>
-                    </div>
-
-                    <p id="guestHint" class="muted" style="display:none;margin-top:10px">
-                        Jesteś jako gość – trening nie zapisze się w bazie.
-                        <br><br>
-                        <button class="secondary" onclick="goToLogin()">Zaloguj / Załóż konto</button>
-                    </p>
-                </div>
             </div>
-
-            <!-- ćwiczenia -->
-            <div id="exercises" class="stack"></div>
-
-            <!-- notatka + zapis -->
-            <div class="card">
-                <textarea id="notes" placeholder="Notatka (opcjonalna)" style="height:84px"></textarea>
-                <div style="margin-top:12px">
-                    <button onclick="saveWorkout()">💾 Zapisz trening</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- ===== HISTORY ===== -->
-        <section id="section-history" class="stack" style="display:none">
-
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h3 style="margin:0">Historia</h3>
-                        <div class="muted" style="margin-top:4px">Kliknij wpis, żeby zobaczyć szczegóły</div>
-                    </div>
-                    <div class="row">
-                        <button class="secondary" onclick="loadHistory()">Odśwież</button>
-                        <button class="secondary" onclick="toggleCalendar()">Kalendarz</button>
-                    </div>
-                </div>
-
-                <div id="history" class="stack-sm" style="margin-top:12px"></div>
-            </div>
-
-            <div id="calendarCard" class="card" style="display:none">
-                <div class="calendar-head">
-                    <button class="secondary" onclick="prevMonth()">←</button>
-                    <div id="calendarTitle" class="calendar-title"></div>
-                    <button class="secondary" onclick="nextMonth()">→</button>
-                </div>
-
-                <div class="muted" style="margin-bottom:10px">Zielone dni = był trening. Kliknij dzień, żeby podejrzeć.</div>
-                <div id="calendar" class="calendar"></div>
-            </div>
-
-            <div id="dayView" class="card" style="display:none"></div>
-        </section>
-
-        <!-- ===== PROGRESS ===== -->
-        <section id="section-progress" class="stack" style="display:none">
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h3 style="margin:0">Progres</h3>
-                        <div class="muted" style="margin-top:4px">Wybierz ćwiczenie i zobacz trend</div>
-                    </div>
-                </div>
-
-                <select id="progressSelect" onchange="onProgressSelect(this.value)">
-                    <option value="">— wybierz ćwiczenie —</option>
-                </select>
-            </div>
-
-            <div class="card">
-                <canvas id="chart" style="width:100%; max-height:340px;"></canvas>
-            </div>
-        </section>
-
+        </div>
     </section>
 </main>
 
