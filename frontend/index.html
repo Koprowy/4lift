@@ -13,6 +13,8 @@
         <span class="brand-dot"></span>
         <span>4lift</span>
     </div>
+    <button class="secondary" onclick="openHelpModal()" style="margin-left:12px">❓ INSTRUKCJA OBSŁUGI</button>
+
 
     <div id="topbarAuthed" class="topbar-right" style="display:none">
         <span id="whoami" class="muted"></span>
@@ -210,11 +212,96 @@
     </section>
 </main>
 
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<!-- Supabase -->
+<!-- supabase + chart -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="script.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
+<script src="config.js"></script>
+<script src="app.state.js"></script>
+<script src="app.api.js"></script>
+<script src="app.ui.js"></script>
+
+
+
+<!-- ===== HELP MODAL ===== -->
+<div id="helpModal" class="modal-backdrop" style="display:none">
+    <div class="modal-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px">
+            <h3 style="margin:0">Instrukcja — jak działa 4lift</h3>
+            <button class="secondary" onclick="closeHelpModal()">✖</button>
+        </div>
+
+        <div class="stack-sm" style="margin-top:10px">
+            <p class="muted" style="margin:0">
+                4lift to prosty dziennik treningowy: wpisujesz ćwiczenia i serie, zapisujesz trening i możesz śledzić historię oraz progres.
+            </p>
+
+            <div class="card" style="background:#111">
+                <strong>1) Tryb gościa</strong>
+                <div class="muted" style="margin-top:6px">
+                    Możesz kliknąć „Kontynuuj jako gość” — wtedy da się ułożyć trening, ale bez zapisywania historii i progresu.
+                    Rejestracja/logowanie działa przez Supabase.
+                    Przez co rejestracja wymaga potwierdzenia e-mail w ramach testów udostępniam konto aleksandra123@onet.pl hasło : aleksandra 123 to konto testowe.
+                </div>
+            </div>
+
+            <div class="card" style="background:#111">
+                <strong>2) Logowanie i zapis</strong>
+                <div class="muted" style="margin-top:6px">
+                    Po zalogowaniu masz dostęp do wszystkich paneli: „Panel ćwiczeń”, „Historia” oraz „Progres”.
+                    W sekcji „Motywacja” możesz kliknąć „Losuj”, żeby wylosować cytat motywacyjny 🙂
+                </div>
+            </div>
+
+            <div class="card" style="background:#111">
+                <strong>3) Nowy trening</strong>
+                <div class="muted" style="margin-top:6px">
+                    • Wpisz nazwę treningu (np. PUSH A) <br>
+                    • Dodaj ćwiczenia i serie (kg + reps) <br>
+                    • „DS” oznacza drop set <br>
+                    • Możesz użyć gotowego szablonu i go edytować <br>
+                    • Opcja „Wyczyść” usuwa cały aktualny trening
+                </div>
+            </div>
+
+            <div class="card" style="background:#111">
+                <strong>4) Historia i kalendarz</strong>
+                <div class="muted" style="margin-top:6px">
+                    W „Historii” widzisz zapisane treningi. Domyślnie lista pokazuje 4 wpisy — kliknij „Pokaż więcej”, aby rozwinąć.
+                    Zielone dni w kalendarzu oznaczają, że był trening — kliknij dzień, aby podejrzeć szczegóły.
+                    Opcja „Powtórz” przenosi trening z wybranego dnia do „Panelu ćwiczeń”, żeby łatwo odtworzyć jednostkę i podbić ciężar.
+                </div>
+            </div>
+
+            <div class="card" style="background:#111">
+                <strong>5) Progres</strong>
+                <div class="muted" style="margin-top:6px">
+                    W „Progresie” wybierz ćwiczenie — wykres pokazuje trend maksymalnego ciężaru w czasie.
+                </div>
+            </div>
+
+            <div class="card" style="background:#111">
+                <strong>6) Instruktaż ćwiczeń</strong>
+                <div class="muted" style="margin-top:6px">
+                    Przycisk 🎥 otwiera YouTube z wyszukaniem techniki ćwiczenia (pomoc przy nazwach/aliasach).
+                </div>
+            </div>
+
+            <div class="card" style="background:#111">
+                <strong>Autosave</strong>
+                <div class="muted" style="margin-top:6px">
+                    Aplikacja automatycznie zapisuje szkic treningu lokalnie w przeglądarce. Po odświeżeniu możesz przywrócić niedokończony trening.
+                </div>
+            </div>
+
+            <div class="muted" style="text-align:right">
+                Tip: jeśli coś nie działa, sprawdź konsolę (F12) i czy backend działa pod /api.
+            </div>
+        </div>
+    </div>
+</div>
+
 
 </body>
 </html>

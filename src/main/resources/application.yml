@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/fourlift}
+    username: ${SPRING_DATASOURCE_USERNAME:fourlift}
+    password: ${SPRING_DATASOURCE_PASSWORD:fourliftpass}
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: ${SPRING_JPA_DDL_AUTO:update}
+    show-sql: false
+
+server:
+  port: 8080

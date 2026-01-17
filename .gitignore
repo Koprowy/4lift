@@ -11,5 +11,6 @@ out/
 .idea/
 *.iml
 
-# Local config
-src/main/resources/application.yml
+# secrets/local configs
+frontend/config.js
+.env

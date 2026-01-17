@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fourlift
+      POSTGRES_USER: fourlift
+      POSTGRES_PASSWORD: fourliftpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - fourlift_pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/fourlift
+      SPRING_DATASOURCE_USERNAME: fourlift
+      SPRING_DATASOURCE_PASSWORD: fourliftpass
+      SPRING_JPA_DDL_AUTO: update
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+
+volumes:
+  fourlift_pgdata:
+
